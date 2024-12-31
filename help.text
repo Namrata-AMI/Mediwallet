@@ -1,0 +1,12 @@
+/project-root
+├── /views               // Contains EJS templates
+│   ├── /partials        // Partial views (like header, footer, etc.)
+│   ├── layout.ejs       // Main layout
+│   ├── signup.ejs       // Signup form
+│   └── index.ejs        // Homepage
+├── /public              // Static files (CSS, JS, Images)
+├── /models              // MongoDB models
+├── /routes              // Express routes
+├── app.js               // Main Express app
+├── package.json         // Project dependencies and scripts
+└── .env                 // Environment variables

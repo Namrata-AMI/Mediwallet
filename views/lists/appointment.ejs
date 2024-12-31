@@ -1,0 +1,26 @@
+<%- layout('/layouts/boilerplate') %>
+
+<div class="row justify-content-center">
+  <h1 class="col-12 mb-4"> Book Appointment on MediWallet</h1>
+</div>
+<div class="row row-cols-lg-3 row-cols-md-3 row-cols-sm-2 mt-3">
+    <% for(doctor of doctors){ %>
+    <div class="card col docards m-2">
+        <% if(doctor.gender == "male"){ %>
+            <img src="/assets/maledoc.jpg" class="card-img-top" alt="..." >
+        <% } %>
+        <% if(doctor.gender == "female"){ %>
+            <img src="/assets/femaldoc.jpg" class="card-img-top" alt="...">
+       <% } %>
+        <div class="card-body">
+          <h5 class="card-title"><strong><%= doctor.name %></strong></h5>
+          <p class="card-text"><i><%= doctor.specialisation %></i></p>
+          <p class="card-text"><%= doctor.consultationPrice %></p>
+
+          <a href="/app/<%= doctor._id %>/<%= patients._id %>" class="btn btn-outline-success">Book Appointment with <%= patients.name %></a>
+
+      </div>
+      </div>
+    <% } %>
+    </div>
+</div>

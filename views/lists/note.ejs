@@ -1,0 +1,70 @@
+<%- layout('/layouts/boilerplate') %>
+
+<style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 50px auto;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #4CAF50;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        ul li {
+            margin: 10px 0;
+        }
+        .print-button {
+            background-color: #4CAF50;
+            color: #fff;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .print-button:hover {
+            background-color: #45a049;
+        }
+        footer {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #777;
+        }
+    </style>
+
+<body>
+    <div class="justify-content-center">
+        
+        <h1 class="col-12 mb-4">Appointment Confirmation</h1>
+        <p class="card-text">Dear <%= appointment.patient_Id.username %>,</p>
+        <p class="card-text">Your appointment has been successfully booked with Dr. <%= appointment.doctor_Id.name %>.</p>
+        <p class="card-text"><strong>Appointment Details:</strong></p>
+        <ul>
+            <li>Doctor: <%= appointment.doctor_Id.name %></li>
+            <li>Consultation Price: ₹<%= appointment.discount_applied ? (appointment.doctor_Id.consultationPrice * 0.8).toFixed(2) : appointment.doctor_Id.consultationPrice %></li>
+            <li>Discount Applied: <%= appointment.discount_applied ? "Yes (20%)" : "No" %></li>
+        </ul>
+        <p class="card-text">Thank you for using Mediwallet!</p>
+        <div>
+            <button class="print-button btn btn-success" onclick="window.print()">Print Note</button>
+        </div>
+    </div>
+    <footer>
+        <p class="card-text">For support, contact us at support@mediwallet.com or call 1800-123-456.</p>
+    </footer>
+</body>
+</html>

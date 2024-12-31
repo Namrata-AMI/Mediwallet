@@ -1,0 +1,35 @@
+<%- layout("layouts/boilerplate") %> <!-- This includes the layout boilerplate -->
+
+<!-- Main content of the index page -->
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-12 text-center">
+            <h1>Welcome to MediWallet</h1>
+            <p>Your one-stop solution for managing health finances.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <h2>Features</h2>
+            <ul>
+                <li>Track your medical expenses</li>
+                <li>Get health insurance recommendations</li>
+                <li>Save your prescriptions and invoices</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12 text-center mb-5">
+            <% if(!newUser){ %>
+            <a href="/app/signup" class="btn btn-primary">Sign Up Now</a>
+            <a href="/app/login" class="btn btn-primary">Login now</a>
+           <% } %>
+           
+           <% if(newUser){ %>
+            <a href="/app/logout" class="btn btn-dark">Logout</a>
+          <% } %>
+        </div>
+    </div>
+</div>

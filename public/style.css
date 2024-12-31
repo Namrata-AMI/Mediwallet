@@ -1,0 +1,63 @@
+body{
+    font-family: "Plus Jakarta Sans", sans-serif !important;
+    display:flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.container{
+  flex:1;
+}
+
+.navbar{
+    height:5rem;
+    background-color:#d5f3b9 !important;
+    box-shadow: #D4F3B7 0px 54px 50px, #D4F3B7 0px -12px 30px, #D4F3B7 0px 4px 6px, #D4F3B7 0px 12px 13px, #D4F3B7  0px -3px 5px;
+}
+
+.navbar-brand{
+    font-size: 1.5rem !important;
+}
+
+.f-info-links a{
+    text-decoration: none;
+    color:#222222;
+}
+
+.f-info-links a:hover{
+    text-decoration: underline;
+}
+
+.f-info-socials, .f-info-links, .f-info-brand{
+    width:100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.f-info-socials i{
+    font-size: 1.3rem;
+    margin-right: 1rem;
+}
+
+.f-info{
+    text-align:center;
+    height:8rem;
+    display: flex;
+    background-color: #ebebeb;
+    flex-wrap:wrap;
+    justify-content:center;
+    align-items: space-evenly;
+}
+
+.card-img-top{
+    border-radius: 50% !important;
+    max-height: 60% !important;
+}
+
+.docards{
+    padding: 0.5rem !important;
+    width:30% !important;
+    margin-bottom: 1rem !important;
+    box-shadow: 12px 15px 15px #D4F3B7;
+}
