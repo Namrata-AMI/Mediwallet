@@ -1,12 +1,7 @@
 const mongoose = require("mongoose");
-const Schema = mongooseSchema;
+const Schema = mongoose.Schema;
 
 const transactionSchema = new Schema({
-    transaction_id:{
-        type:String,
-        required:true,
-        required:true,
-    },
     patient_id:{
         type:mongoose.Schema.Types.ObjectId,
         ref:'patient',

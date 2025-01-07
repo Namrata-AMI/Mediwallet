@@ -4,6 +4,7 @@ const doctor = require("../models/doctor.js");
 const patient = require("../models/patient.js");
 const appointment = require("../models/appointment.js");
 const dburl = "mongodb://127.0.0.1:27017/Mediwallet";
+const wallet = require("../models/wallet.js");
 
 main()
 .then((res)=>{
@@ -48,9 +49,23 @@ const initappoint = async()=>{
     console.log("data was initialised");
 }
 
-initappoint();
+const initwallet = async()=>{
+    await wallet.deleteMany({});
+    initData.wallets = initData.wallets.map((obj)=>({
+        ...obj,
+        owner:'6606423fd4b7ebd8ad6efbc2',
+    }));
+    await wallet.insertMany(initData.wallets);
+    console.log("data was initialised");
+}
 
-initpatient();
+
 
 initDB();
+initpatient();
+initappoint();
+
+initwallet();
+
+
 console.log(initData);

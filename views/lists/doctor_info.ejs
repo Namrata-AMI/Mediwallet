@@ -1,0 +1,17 @@
+<%- layout("layouts/boilerplate") %> 
+
+<div class="container mt-5">
+    <div class="card" style="box-shadow: 12px 15px 15px #D4F3B7;">
+        <div class="card-body">
+          <h1 class="card-title"><%= doctor.name %></h1>
+          <h5 class="card-subtitle mb-2 mt-2 text-body-secondary"><%= doctor.specialisation %></h5>
+          <h5 class="card-text mt-3 des" style="color:cadetblue;"><%=doctor.description %></h5>
+          <p class="card-text mt-3"><b>Timings :</b> <%= doctor.timings.hours.start %>  to  <%= doctor.timings.hours.end %></a>
+          <p class="card-text mt-3"><b>On :</b> <%= doctor.timings.days %></p>
+          <p class="card-text mt-3"> <b>Address: </b> <%= doctor.address %></p>
+          <form action="/app/<%= doctor._id%>/<%= patient._id%>" method="post">
+            <button class="btn btn-success">Appointment</button>
+          </form>
+        </div>
+      </div>
+    </div>

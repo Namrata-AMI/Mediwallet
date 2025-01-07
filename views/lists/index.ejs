@@ -1,6 +1,6 @@
-<%- layout("layouts/boilerplate") %> <!-- This includes the layout boilerplate -->
+<%- layout("layouts/boilerplate") %> 
 
-<!-- Main content of the index page -->
+
 <div class="container mt-5">
     <div class="row">
         <div class="col-12 text-center">
@@ -28,6 +28,7 @@
            <% } %>
            
            <% if(newUser){ %>
+            <a href="/app/wallet/<%= newUser._id%>" class="btn btn-success">Wallet</a>
             <a href="/app/logout" class="btn btn-dark">Logout</a>
           <% } %>
         </div>

@@ -18,7 +18,7 @@ const appointmentSchema = new Schema({
     },
     discount:{
         type:Number,
-        min:0.1,
+        min:0,
     },
     date_of_appointment:{
         type:Date,

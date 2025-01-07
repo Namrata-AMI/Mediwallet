@@ -14,6 +14,10 @@ const Doctor = require("./models/doctor");
 const Appointment = require("./models/appointment");
 const Patient = require("./models/patient");
 const pdf = require('html-pdf');
+const Wallet = require("./models/wallet");
+const wallet = require("./models/wallet");
+const patient = require("./models/patient");
+const transaction = require("./models/transaction");
 
 
 
@@ -73,13 +77,10 @@ app.post("/app/signup",async(req,res)=>{
         try{
             const newUser = new User ({username,email});
             const registeredUser = await User.register(newUser,password);
-            if(walletbalance<300){
-                req.flash("error","minimum balanace required to 300 rupees.");
-            }
             const newPatient = new Patient({
                 username,
-                email,
-                walletbalance:parseInt(walletbalance),   
+                email, 
+                walletbalance:0, 
                 user:registeredUser._id,
             });
             await newPatient.save();
@@ -90,7 +91,7 @@ app.post("/app/signup",async(req,res)=>{
                 return next(err);
             }
             req.flash("success","Welcome to Mediwallet !");
-            return res.redirect("/app/appointment");
+            return res.redirect("/app");
         });
     }
     catch(err){
@@ -112,9 +113,31 @@ app.get("/app/login",(req,res)=>{
 
 app.post("/app/login",passport.authenticate("local",{failureRedirect:"/app/login",failureFlash:true}),(req,res)=>{
     req.flash("sucess","welcome to Mediwallet !");
-    return res.redirect("/app/appointment");
+    return res.redirect("/app");
 })
 
+///////////// wallet details ////////
+app.get("/app/wallet/:newuserr", async(req,res)=>{
+    const newUserid = req.params.newuserr;
+    //console.log("New User .......: " , newUserid);
+    const patient = await Patient.findOne({user : newUserid});
+    console.log("patient :" ,patient);
+    const walletdetails = await wallet.findOne({patient_Id:patient._id});
+    if(!walletdetails){
+        req.flash("error","no record before, Please add funds to wallet!");
+        return res.redirect(`/app/add-funds/${patient._id}`);
+    }
+    const newWallet = walletdetails.transactions.map(transaction=>{
+        return {
+            amount:transaction.amount,
+            type:transaction.type,
+            description:transaction.description,
+            date:transaction.date.toISOString().split('T')[0],
+        }
+    })
+    console.log("walllet details :...",wallet);
+    return res.render("lists/wallet.ejs",{patient,newWallet});  
+})
 
 // appointment //
 app.get("/app/appointment",async(req,res)=>{
@@ -122,11 +145,13 @@ app.get("/app/appointment",async(req,res)=>{
         return res.redirect("/app/login"); 
     }
     let doctors = await Doctor.find({});
+   // console.log("doctor :  ",doctors);
     const patients = await Patient.findOne({ user: req.user._id });
     res.render("lists/appointment.ejs",{doctors,patients});
 });
 
 
+// add funds //
 app.get("/app/add-funds/:patientid",async(req,res)=>{
     const patientId = req.params.patientid;
     req.flash("error","funds not less than 300" );
@@ -139,6 +164,7 @@ app.post("/app/add-funds/:patientid", async (req, res) => {
         return res.redirect("/app/login"); 
     }
 
+    const patient_Id = req.params.patientid;
     //const userId = req.user._id;  // currently authenticated user's ID
     const { amount } = req.body;   //amount to add from the request body
 
@@ -146,10 +172,8 @@ app.post("/app/add-funds/:patientid", async (req, res) => {
 
     if (!amount || amount < 300) {
         req.flash("error", "Minimum amount rupess 300.");
-        return res.redirect("/app/add-funds");
+        return res.redirect(`/app/add-funds/${patient_Id}`);
     }
-
-    const patient_Id = req.params.patientid;
 
     try {
         // Find the user and update the walletbalance by adding the specified amount
@@ -158,6 +182,38 @@ app.post("/app/add-funds/:patientid", async (req, res) => {
             { $inc: { walletbalance: amount } },  // Use $inc to increment the walletbalance
             { new: true }  // This ensures the updated document is returned
         );
+
+        const patient = await Patient.findById(patient_Id);
+
+        /*const updateWallet = new Wallet({   // saving the wallet
+             patient_Id: patient_Id ,
+             balance: patient.walletbalance,
+             transactions:[{
+                        amount:amount,
+                        type:'Credit',
+                        description:`${amount} is added to wallet.`,
+                        date:Date.now(),
+             }],
+        });
+
+        await updateWallet.save();*/
+
+        const wallet = await Wallet.findOneAndUpdate(
+            { patient_Id },
+            {
+                $inc: { balance: amount },
+                $push: {
+                    transactions: {
+                        amount,
+                        type: 'Credit',
+                        description: `${amount} is added to wallet.`,
+                        date: new Date(),
+                    },
+                },
+            },
+            { upsert: true, new: true }
+        );
+        
 
         if (!mongoose.Types.ObjectId.isValid(patient_Id)) {
             req.flash("error", "Invalid Patient ID.");
@@ -179,27 +235,42 @@ app.post("/app/add-funds/:patientid", async (req, res) => {
 });
 
 
-/// appointment confirmed //
+/// appointment confirmed pdf //
 app.get('/app/note/:appointmentId', async (req, res) => {
     const appointmentId = req.params.appointmentId;
     const appointment = await Appointment.findById(appointmentId).populate('patient_Id').populate('doctor_Id');
     res.render('lists/note.ejs', { appointment });
+
 });
 
 
-/// appointment confirming //
+/// show doctors details  //
 app.get("/app/:doctorId/:patientId", async (req, res) => {
     const doctorid = req.params.doctorId;
     const patientid = req.params.patientId;
-
-    const isfirstappoint = await Appointment.findOne({ patientid, doctorid });
-    
     const doctor = await Doctor.findById(doctorid);
+    const patient = await Patient.findById(patientid);
+    res.render("lists/doctor_info.ejs",{doctor,patient});
+});
+
+
+///////// confirm appointment ////////////// 
+app.post("/app/:doctorId/:patientId",async(req,res)=>{
+    const doctorid = req.params.doctorId;
+    const patientid = req.params.patientId;
 
     const patient = await Patient.findById(patientid);
+    const doctor = await Doctor.findById(doctorid);
 
     let discount = 0;
     let discountedPrice;
+
+    const isfirstappoint = await Appointment.findOne({ patientid, doctorid });
+
+    if(patient.walletbalance < doctor.consultationPrice){
+        req.flash("error","Recharge Your wallet !");
+        return res.redirect(`/app/add-funds/${patientid}`);
+    }
 
     if (!isfirstappoint) {
         req.flash("success", "Discount on first appointment!!!!");
@@ -211,39 +282,86 @@ app.get("/app/:doctorId/:patientId", async (req, res) => {
 
     discountedPrice = doctor.consultationPrice * (1 - discount);
     
-        if (patient.walletbalance >= discountedPrice) {
-            patient.walletbalance -= discountedPrice;
-            await patient.save();
+    if (patient.walletbalance >= discountedPrice) {
+        patient.walletbalance -= discountedPrice;
+        await patient.save();
 
-            const appointment = new Appointment({
-                patient_Id: patientid,
-                doctor_Id: doctorid,
-                discount_applied: true,
-            });
+        const appointment = new Appointment({
+            patient_Id: patientid,
+            doctor_Id: doctorid,
+            discount_applied: true,
+        });
+  
 
-            const appointmentDate = new Date();
-            appointmentDate.setDate(appointmentDate.getDate() + 2);
+        const appointmentDate = new Date();
+        appointmentDate.setDate(appointmentDate.getDate() + 2);
 
-            const randomHour = Math.floor(Math.random() * (19 - 10 + 1)) + 10;  // Random hour between 10 and 19
-            const randomMinute = Math.floor(Math.random() * 60); 
+        const randomHour = Math.floor(Math.random() * (19 - 10 + 1)) + 10;  // Random hour between 10 and 19
+        const randomMinute = Math.floor(Math.random() * 60); 
 
-            appointmentDate.setHours(randomHour, randomMinute, 0, 0);
+        appointmentDate.setHours(randomHour, randomMinute, 0, 0);
 
-            appointment.appointmentDate = appointmentDate;
-            const appointmentDone = await appointment.save();
+        appointment.appointmentDate = appointmentDate;
+        const appointmentDone = await appointment.save();
 
-            const formattedDate = appointmentDate.toLocaleString(); 
-            
-            req.flash("success", `Appointment Booked! Date & Time : ${formattedDate}`);
-            return res.redirect(`/app/note/${appointmentDone._id}`);  
-        } 
-        else {
-            req.flash("error", "Insufficient balance.");
-            return res.redirect(`/app/add-funds/${patientid}`);
-        }
+        /*const updateWallet = new Wallet({   // saving the wallet
+            patient_Id: patientid ,
+            balance: patient.walletbalance,
+            transactions:[{
+                       amount:discountedPrice,
+                       type:'Debit',
+                       description:`${patient.walletbalance} is deducted to wallet.`,
+                       date:Date.now(),
+            }],
+        });
+        await updateWallet.save();*/
+
+        //console.log(updateWallet.description);
+       const updatedWallet = await Wallet.findOneAndUpdate(
+        { patient_Id: patientid },
+        {
+            $set: { balance: patient.walletbalance },
+            $push: {
+                transactions: {
+                    amount: discountedPrice,
+                    type: 'Debit',
+                    description: `Consultation with ${doctor.name}`,
+                    date: Date.now(),
+                }
+            }
+        },
+        { new: true , upsert:true} // Returns the updated document
+    );
+        console.log(updatedWallet);
+        
+
+        console.log(patient.walletbalance);
+
+        patient.save();
+
+        const formattedDate = appointmentDate.toLocaleString(); 
+        
+        req.flash("success", `Appointment Booked! Date & Time : ${formattedDate}`);
+        return res.redirect(`/app/note/${appointmentDone._id}`);  
+    } 
+    else {
+        req.flash("error", "Insufficient balance.");
+        return res.redirect(`/app/add-funds/${patientid}`);
+    }
 });
 
 
+
+//// logout ////
+app.get("/app/logout", async(req,res,next)=>{
+    req.logout((err)=>{
+        if(err){
+            return next(err);
+        }
+        req.flash("success", "you looged out!");
+        res.redirect("/app");
+    })
+})
 
 main()
 .then((res)=>{
