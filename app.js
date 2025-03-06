@@ -12,7 +12,7 @@ const passport = require("passport");
 const LocalStrategy = require("passport-local");
 const session = require("express-session");
 const User = require("./models/user");
-const dbUrl = "mongodb://127.0.0.1:27017/Mediwallet";
+const dbUrl = process.env.DB_URL;
 const Doctor = require("./models/doctor");
 const Appointment = require("./models/appointment");
 const Patient = require("./models/patient");
@@ -23,8 +23,6 @@ const multer = require("multer");
 const {storage} = require("./cloudconfig.js");
 const upload = multer({storage});
 const MongoStore = require("connect-mongo");
-//const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-//const {processMedicalBill} = require("./help.js");
 const { processMedicalBill } = require("./GeminiService.js");
 
 const {isLoggedIn} = require("./middleware.js");
@@ -43,7 +41,7 @@ const sessionOptions = {
     resave:false,
     saveUninitialized:true,
     store: MongoStore.create({
-        mongoUrl: process.env.DB_URL, 
+        mongoUrl: dbUrl, 
         collectionName: "sessions",
         ttl: 7 * 24 * 60 * 60, 
     }),
