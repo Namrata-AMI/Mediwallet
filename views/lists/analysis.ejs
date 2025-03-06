@@ -1,0 +1,18 @@
+<%- layout("/layouts/boilerplate") %>
+
+<div class="container mt-5">
+    <h2 class="mb-4">AI Bill Analysis</h2>
+
+    <% if (analysisRes.length > 0) { %>
+        <div class="card p-4">
+            <% analysisRes.forEach((result, index) => { %>
+                <p><strong>Page <%= index + 1 %>:</strong> <%= result %></p>
+                <hr>
+            <% }); %>
+        </div>
+    <% } else { %>
+        <p>No analysis available.</p>
+    <% } %>
+
+    <a href="/app/analysis" class="btn btn-primary mt-3">Upload Another Bill</a>
+</div>

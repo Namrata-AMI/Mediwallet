@@ -1,8 +1,11 @@
+require("dotenv").config();
+
 const express = require("express");
 const app = express();
 const mongoose = require("mongoose");
 const cors = require('cors');
 const flash = require("connect-flash");
+const fs = require("fs");
 const path = require("path");
 const ejsMate = require("ejs-mate");
 const passport = require("passport");
@@ -15,9 +18,16 @@ const Appointment = require("./models/appointment");
 const Patient = require("./models/patient");
 const pdf = require('html-pdf');
 const Wallet = require("./models/wallet");
-const wallet = require("./models/wallet");
-const patient = require("./models/patient");
-const transaction = require("./models/transaction");
+const Bill = require("./models/bill.js");
+const multer = require("multer");
+const {storage} = require("./cloudconfig.js");
+const upload = multer({storage});
+const MongoStore = require("connect-mongo");
+//const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+//const {processMedicalBill} = require("./help.js");
+const { processMedicalBill } = require("./GeminiService.js");
+
+const {isLoggedIn} = require("./middleware.js");
 
 
 
@@ -32,6 +42,11 @@ const sessionOptions = {
     secret: "Mediwalletapp123",         // oour secret
     resave:false,
     saveUninitialized:true,
+    store: MongoStore.create({
+        mongoUrl: process.env.DB_URL, 
+        collectionName: "sessions",
+        ttl: 7 * 24 * 60 * 60, 
+    }),
     cookie:{
         expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
         maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -40,7 +55,9 @@ const sessionOptions = {
 }
 
 app.use(session(sessionOptions));
-app.use(flash());                          
+app.use(flash());   
+app.use(express.json());
+
 
 
 app.use(passport.initialize());
@@ -60,6 +77,28 @@ res.locals.error = req.flash("error");
 });
 
 app.use(cors());
+
+
+
+/// test or check gen ai ////////////////////////////////////////////////
+/*app.post("/generate", async (req, res) => {
+    console.log("Received request body:", req.body); // Debugging line
+    const { prompt } = req.body;
+
+    if (!prompt) {
+        console.error("Error: prompt is required");
+        return res.render("index",{})
+    }
+
+    try {
+        const response = await generateResponse(prompt);
+        res.json({ response });
+        console.log(response);
+    } catch (error) {
+        console.error("Error generating response:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});*/
 
 
 app.get("/app",(req,res)=>{
@@ -112,17 +151,15 @@ app.get("/app/login",(req,res)=>{
 });
 
 app.post("/app/login",passport.authenticate("local",{failureRedirect:"/app/login",failureFlash:true}),(req,res)=>{
-    req.flash("sucess","welcome to Mediwallet !");
+    req.flash("success","welcome to Mediwallet !");
     return res.redirect("/app");
 })
 
 ///////////// wallet details ////////
-app.get("/app/wallet/:newuserr", async(req,res)=>{
+app.get("/app/wallet/:newuserr",isLoggedIn, async(req,res)=>{
     const newUserid = req.params.newuserr;
-    //console.log("New User .......: " , newUserid);
     const patient = await Patient.findOne({user : newUserid});
-    console.log("patient :" ,patient);
-    const walletdetails = await wallet.findOne({patient_Id:patient._id});
+    const walletdetails = await Wallet.findOne({patient_Id:patient._id});
     if(!walletdetails){
         req.flash("error","no record before, Please add funds to wallet!");
         return res.redirect(`/app/add-funds/${patient._id}`);
@@ -134,31 +171,31 @@ app.get("/app/wallet/:newuserr", async(req,res)=>{
             description:transaction.description,
             date:transaction.date.toISOString().split('T')[0],
         }
-    })
-    console.log("walllet details :...",wallet);
+    });
+
+    console.log("walllet details :...",Wallet);
     return res.render("lists/wallet.ejs",{patient,newWallet});  
 })
 
 // appointment //
-app.get("/app/appointment",async(req,res)=>{
-    if (!req.isAuthenticated()) {
+app.get("/app/appointment", isLoggedIn ,async(req,res)=>{
+    if (!req.user) {
         return res.redirect("/app/login"); 
     }
     let doctors = await Doctor.find({});
-   // console.log("doctor :  ",doctors);
     const patients = await Patient.findOne({ user: req.user._id });
     res.render("lists/appointment.ejs",{doctors,patients});
 });
 
 
 // add funds //
-app.get("/app/add-funds/:patientid",async(req,res)=>{
+app.get("/app/add-funds/:patientid", isLoggedIn ,async(req,res)=>{
     const patientId = req.params.patientid;
     req.flash("error","funds not less than 300" );
     res.render("lists/addfund.ejs",{patientId});
 })
 
-
+// add funds //
 app.post("/app/add-funds/:patientid", async (req, res) => {
     if (!req.isAuthenticated()) {
         return res.redirect("/app/login"); 
@@ -235,8 +272,9 @@ app.post("/app/add-funds/:patientid", async (req, res) => {
 });
 
 
+
 /// appointment confirmed pdf //
-app.get('/app/note/:appointmentId', async (req, res) => {
+app.get('/app/note/:appointmentId', isLoggedIn ,async (req, res) => {
     const appointmentId = req.params.appointmentId;
     const appointment = await Appointment.findById(appointmentId).populate('patient_Id').populate('doctor_Id');
     res.render('lists/note.ejs', { appointment });
@@ -245,7 +283,7 @@ app.get('/app/note/:appointmentId', async (req, res) => {
 
 
 /// show doctors details  //
-app.get("/app/:doctorId/:patientId", async (req, res) => {
+app.get("/app/:doctorId/:patientId", isLoggedIn, async (req, res) => {
     const doctorid = req.params.doctorId;
     const patientid = req.params.patientId;
     const doctor = await Doctor.findById(doctorid);
@@ -350,6 +388,83 @@ app.post("/app/:doctorId/:patientId",async(req,res)=>{
     }
 });
 
+
+
+
+/////// Upload bills ///////
+app.get("/app/bill",isLoggedIn, (req, res) => {
+    res.render("lists/bill.ejs");
+});
+
+
+app.post("/app/bill", isLoggedIn , upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) {
+            req.flash("error", "No file uploaded!");
+            return res.redirect("/app/bill"); 
+        }
+
+        const { description, amount } = req.body;
+        if (!description || !amount) {
+            req.flash("error", "Please fill all details.");
+            return res.redirect("/app/bill");
+        }
+
+        const newBill = new Bill({
+            fileUrl: req.file.path,
+            patient_Id: req.user ? req.user._id : null,
+            description,
+            amount,
+        });
+
+        await newBill.save();
+        req.flash("success", "Bill uploaded successfully!");
+        return res.redirect("/app/bill");
+
+    } catch (error) {
+        console.error("Error uploading bill:", error);
+        req.flash("error", "Error processing the bill.");
+        return res.redirect("/app/bill"); 
+    }
+});
+
+
+
+/////////////////////// AI analaysis  ///////////////////////
+app.get("/app/analysis", isLoggedIn ,(req,res)=>{
+    const analysisRes = req.session.analaysisRes || [];
+    req.session.analysisRes = null ; // clear sessiion after display //
+    res.render("lists/analysis.ejs",{analysisRes});
+})
+
+
+app.post("/app/analysis",upload.single("file"), isLoggedIn ,async(req,res)=>{
+    if(!req.file){
+        req.flash("error","File not uploaded, Plaese upload again !");
+        return res.redirect("/app/analysis");
+    }
+    try{
+        const pdfPath = req.file.path;
+        console.log("Analysing the document...........  " , pdfPath); 
+
+        const analysisRes = await processMedicalBill(pdfPath);
+
+        req.session.analysisRes = analysisRes;  // stroing the result  session 
+
+        res.redirect("/app/analysis");
+    }
+    catch(e){
+        console.log(e);
+        req.flash("error",e.message);
+        res.redirect("/app/analysis");
+    }
+})
+
+  
+///////////////////////// Track Expenses ////////////////////////////
+app.get("app/track_expense", (req, res) => {
+    res.render("lists/track_expenses.ejs");
+});
 
 
 //// logout ////
