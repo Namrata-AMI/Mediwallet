@@ -1,18 +1,36 @@
 <%- layout("/layouts/boilerplate") %>
 
-<div class="container mt-5">
-    <h2 class="mb-4">AI Bill Analysis</h2>
+<div class="container mt-5 mb-5">
+    <h2 class="mb-4">
+        <i class="fa-solid fa-bolt" style="color: #FFD43B;"></i> AI Bill Analysis
+    </h2>
 
-    <% if (analysisRes.length > 0) { %>
+    <% if (analysisRes && analysisRes.length > 0) { %>
         <div class="card p-4">
+            <h4 class="mb-3">Analysis Summary</h4>
             <% analysisRes.forEach((result, index) => { %>
-                <p><strong>Page <%= index + 1 %>:</strong> <%= result %></p>
-                <hr>
+                <div class="mb-3">
+                    <h5><strong>Page <%= index + 1 %>:</strong></h5>
+                    <div class="alert alert-info p-3">
+                        <pre class="mb-0" style="font-weight:500; white-space: pre-wrap;"><%= result %></pre>
+                    </div>
+                </div>
             <% }); %>
         </div>
     <% } else { %>
-        <p>No analysis available.</p>
+        <div class="alert alert-warning">No analysis available. Upload a bill to get started!</div>
     <% } %>
 
-    <a href="/app/analysis" class="btn btn-primary mt-3">Upload Another Bill</a>
+    <!-- File Upload Form -->
+    <form method="post" action="/app/analysis" enctype="multipart/form-data" class="mt-4">
+        <div class="mb-3">
+            <label for="formFile" class="form-label">Upload Bill</label>
+            <input class="form-control" type="file" name="file" accept="image/*,.pdf" required>
+            <div class="invalid-feedback">Please upload a valid bill file!</div>
+        </div>
+
+        <button type="submit" class="btn btn-success mt-3">
+            <i class="fa-solid fa-upload"></i> Upload & Analyze
+        </button>
+    </form>
 </div>

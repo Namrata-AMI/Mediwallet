@@ -16,16 +16,17 @@ const dbUrl = process.env.DB_URL;
 const Doctor = require("./models/doctor");
 const Appointment = require("./models/appointment");
 const Patient = require("./models/patient");
-const pdf = require('html-pdf');
 const Wallet = require("./models/wallet");
 const Bill = require("./models/bill.js");
 const multer = require("multer");
-const {storage} = require("./cloudconfig.js");
-const upload = multer({storage});
+//const {storage} = require("./cloudconfig.js");
+//const upload = multer({storage});
+const upload = require("./cloudconfig.js")
 const MongoStore = require("connect-mongo");
 const { processMedicalBill } = require("./GeminiService.js");
 
 const {isLoggedIn} = require("./middleware.js");
+const user = require("./models/user");
 
 
 
@@ -36,6 +37,14 @@ app.use(express.urlencoded({extended:true}));
 app.engine("ejs",ejsMate);
 app.use(express.static(path.join(__dirname,"public")));
 
+const store = MongoStore.create({
+    mongoUrl: dbUrl,
+    crypto:{
+        secret: process.env.SECRET,            // our secret
+    },
+    touchAfter : 24 * 3600,
+});
+
 const sessionOptions = {
     secret: "Mediwalletapp123",         // oour secret
     resave:false,
@@ -43,7 +52,6 @@ const sessionOptions = {
     store: MongoStore.create({
         mongoUrl: dbUrl, 
         collectionName: "sessions",
-        ttl: 7 * 24 * 60 * 60, 
     }),
     cookie:{
         expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
@@ -170,9 +178,9 @@ app.get("/app/wallet/:newuserr",isLoggedIn, async(req,res)=>{
             date:transaction.date.toISOString().split('T')[0],
         }
     });
-
+    const count = await Bill.countDocuments({ userId: user});
     console.log("walllet details :...",Wallet);
-    return res.render("lists/wallet.ejs",{patient,newWallet});  
+    return res.render("lists/wallet.ejs",{patient,newWallet,count});  
 })
 
 // appointment //
@@ -275,7 +283,7 @@ app.post("/app/add-funds/:patientid", async (req, res) => {
 app.get('/app/note/:appointmentId', isLoggedIn ,async (req, res) => {
     const appointmentId = req.params.appointmentId;
     const appointment = await Appointment.findById(appointmentId).populate('patient_Id').populate('doctor_Id');
-    res.render('lists/note.ejs', { appointment });
+    res.render("lists/note.ejs", { appointment });
 
 });
 
@@ -284,6 +292,11 @@ app.get('/app/note/:appointmentId', isLoggedIn ,async (req, res) => {
 app.get("/app/:doctorId/:patientId", isLoggedIn, async (req, res) => {
     const doctorid = req.params.doctorId;
     const patientid = req.params.patientId;
+
+    if (!mongoose.Types.ObjectId.isValid(doctorid) || !mongoose.Types.ObjectId.isValid(patientid)) {
+        req.flash("error", "Invalid ID format.");
+        return res.redirect("/app");
+    }
     const doctor = await Doctor.findById(doctorid);
     const patient = await Patient.findById(patientid);
     res.render("lists/doctor_info.ejs",{doctor,patient});
@@ -301,7 +314,7 @@ app.post("/app/:doctorId/:patientId",async(req,res)=>{
     let discount = 0;
     let discountedPrice;
 
-    const isfirstappoint = await Appointment.findOne({ patientid, doctorid });
+    const isfirstappoint = await Appointment.findOne({ patient_Id: patientid, doctor_Id: doctorid });
 
     if(patient.walletbalance < doctor.consultationPrice){
         req.flash("error","Recharge Your wallet !");
@@ -389,7 +402,72 @@ app.post("/app/:doctorId/:patientId",async(req,res)=>{
 
 
 
-/////// Upload bills ///////
+/////////////////////// AI analaysis  ///////////////////////
+app.get("/app/analysis", isLoggedIn ,(req,res)=>{
+    const analysisRes = req.session.analaysisRes || [];
+    req.session.analysisRes = null ; // clear sessiion after display //
+    res.render("lists/analysis.ejs",{analysisRes});
+})
+
+
+/*app.post("/app/analysis",upload.single("file"), isLoggedIn ,async(req,res)=>{
+    try{
+
+        if(!req.file){
+            req.flash("error","File not uploaded, Plaese upload again !");
+            return res.redirect("/app/analysis");
+        }
+        const pdfPath = req.file.path;
+        console.log("Analysing the document...........  " , pdfPath); 
+
+        const analysisRes = await processMedicalBill(pdfPath);
+
+        req.session.analysisRes = analysisRes;  // stroing the result  session 
+
+        res.redirect("/app/analysis");
+    }
+    catch(e){
+        console.log(e);
+        req.flash("error",e.message);
+        res.redirect("/app/analysis");
+    }
+})*/
+
+
+
+app.post("/app/analysis", upload.single("file"), async (req, res) => {
+    if (!req.file) {
+        req.flash("error", "File not uploaded, please try again!");
+        return res.redirect("/app/analysis");
+    }
+
+    try {
+        const filePath = req.file.path || req.file.url; // Use Cloudinary URL if available
+        console.log("Processing:", filePath);
+
+        // Process the bill (ensure processMedicalBill supports Cloudinary URLs)
+        const analysisResults = await processMedicalBill(filePath);
+
+        // Only delete local files, not Cloudinary URLs
+        if (!filePath.startsWith("http")) {
+            fs.unlinkSync(filePath);
+        }
+
+        res.render("lists/analysis.ejs", { analysisRes: analysisResults });
+    } catch (error) {
+        console.error("Error processing the bill:", error);
+        req.flash("error", "Failed to analyze the bill.");
+        return res.redirect("/app/analysis");
+    }
+});
+  
+///////////////////////// Track Expenses ////////////////////////////
+app.get("/app/track_expense", (req, res) => {
+    res.render("lists/track_expenses.ejs");
+});
+
+
+////// Upload bills ///////
 app.get("/app/bill",isLoggedIn, (req, res) => {
     res.render("lists/bill.ejs");
 });
@@ -417,7 +495,7 @@ app.post("/app/bill", isLoggedIn , upload.single("file"), async (req, res) => {
 
         await newBill.save();
         req.flash("success", "Bill uploaded successfully!");
-        return res.redirect("/app/bill");
+        return res.redirect("/app");
 
     } catch (error) {
         console.error("Error uploading bill:", error);
@@ -428,41 +506,7 @@ app.post("/app/bill", isLoggedIn , upload.single("file"), async (req, res) => {
 
 
 
-/////////////////////// AI analaysis  ///////////////////////
-app.get("/app/analysis", isLoggedIn ,(req,res)=>{
-    const analysisRes = req.session.analaysisRes || [];
-    req.session.analysisRes = null ; // clear sessiion after display //
-    res.render("lists/analysis.ejs",{analysisRes});
-})
 
-
-app.post("/app/analysis",upload.single("file"), isLoggedIn ,async(req,res)=>{
-    if(!req.file){
-        req.flash("error","File not uploaded, Plaese upload again !");
-        return res.redirect("/app/analysis");
-    }
-    try{
-        const pdfPath = req.file.path;
-        console.log("Analysing the document...........  " , pdfPath); 
-
-        const analysisRes = await processMedicalBill(pdfPath);
-
-        req.session.analysisRes = analysisRes;  // stroing the result  session 
-
-        res.redirect("/app/analysis");
-    }
-    catch(e){
-        console.log(e);
-        req.flash("error",e.message);
-        res.redirect("/app/analysis");
-    }
-})
-
-  
-///////////////////////// Track Expenses ////////////////////////////
-app.get("app/track_expense", (req, res) => {
-    res.render("lists/track_expenses.ejs");
-});
 
 
 //// logout ////

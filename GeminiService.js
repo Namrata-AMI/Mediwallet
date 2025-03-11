@@ -1,89 +1,76 @@
+
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require("fs");
 const path = require("path");
+const pdfParse = require("pdf-parse");
 const pdf2img = require("pdf-poppler");
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// Convert PDF to Images
-async function pdfToImg(pdfPath) {
-  const outputDir = path.resolve(__dirname, "output");
-  const opts = {
-    format: "jpeg",
-    out_dir: outputDir,
-    out_prefix: "page",
-    scale: 2.0,
-  };
+async function extractText(pdfPath) {
+  try {
+    const data = await pdfParse(fs.readFileSync(pdfPath));
+    return data.text.trim() || null;
+  } catch (error) {
+    console.error("Error extracting text:", error);
+    return null;
+  }
+}
 
+async function convertPdfToImages(pdfPath) {
+  const outputDir = path.join(__dirname, "output");
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
+
+  const opts = { format: "jpeg", out_dir: outputDir, out_prefix: "page", scale: 2.0 };
   try {
     await pdf2img.convert(pdfPath, opts);
-    console.log("PDF converted to images.");
-
-    // Wait until images are available (polling instead of setTimeout)
-    let retries = 10;
-    while (retries-- > 0) {
-      const imageFiles = fs.readdirSync(outputDir)
-        .filter(file => file.endsWith(".jpeg"))
-        .map(file => path.join(outputDir, file));
-
-      if (imageFiles.length > 0) return imageFiles;
-      await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms before retrying
-    }
-
-    throw new Error("No images found after conversion!");
+    return fs.readdirSync(outputDir).filter(file => file.endsWith(".jpeg"));
   } catch (error) {
-    console.error("Error converting PDF:", error);
+    console.error("Error converting PDF to images:", error);
     return [];
   }
 }
 
-// Convert Image to Generative AI Format
-function fileToGenerativePart(filePath, mimeType) {
-  return {
-    inlineData: {
-      data: fs.readFileSync(filePath).toString("base64"),
-      mimeType,
-    },
-  };
+function prepareImageForAI(filePath) {
+  try {
+    return { inlineData: { data: fs.readFileSync(filePath, "base64"), mimeType: "image/jpeg" } };
+  } catch (error) {
+    console.error("Error reading image file:", error);
+    return null;
+  }
 }
 
-// Analyze Medical Bill
-async function analyzeBill(imagePath) {
+async function analyzeImage(imagePath) {
   try {
-    const imagePart = fileToGenerativePart(imagePath, "image/jpeg");
-
-    const prompt = "Analyze this medical bill and suggest ways to minimize medical expenses, such as insurance coverage, discounts, alternative treatments, or cost-effective options.";
-
-    const result = await model.generateContent([prompt, imagePart]);
-    const responseText = result.response.text();
-
-    console.log(`Analysis for ${imagePath}:\n`, responseText);
-    return responseText;
+    const imageData = prepareImageForAI(imagePath);
+    if (!imageData) return "Error processing image.";
+    
+    const prompt = "Analyze this medical bill and suggest ways to reduce expenses.";
+    const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }, imageData] }] });
+    return result?.response?.text?.() || "No response generated.";
   } catch (error) {
     console.error("Error analyzing image:", error);
     return "Error analyzing bill.";
   }
 }
 
-// Process Medical Bill
 async function processMedicalBill(pdfPath) {
-  const images = await pdfToImg(pdfPath);
-  if (images.length === 0) {
-    console.log("No images found.");
-    return ["No images found."];
+  if (!fs.existsSync(pdfPath)) return ["PDF file does not exist."];
+
+  const extractedText = await extractText(pdfPath);
+  if (extractedText) {
+    const prompt = `Analyze this medical bill and suggest cost-saving options.\n\n${extractedText}`;
+    const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }] }] });
+    return [result?.response?.text?.() || "No response generated."];
   }
 
-  console.log("Analyzing images...");
+  console.log("Extracted text is empty. Converting PDF to images...");
+  const images = await convertPdfToImages(pdfPath);
+  if (!images.length) return ["No images found for analysis."];
 
-  // Process images in parallel for faster execution
-  const analysisResults = await Promise.all(images.map(image => analyzeBill(image)));
-
-  // Cleanup images after processing
-  images.forEach(image => fs.unlinkSync(image));
-
-  return analysisResults;
+  const results = await Promise.all(images.map(img => analyzeImage(path.join(__dirname, "output", img))));
+  return results;
 }
 
-// Export Function
 module.exports = { processMedicalBill };
